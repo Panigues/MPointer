@@ -2,8 +2,9 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <thread>
 #include <unordered_map>
+#include <functional>
+#include <utility>
 #define MPOINTER_GC(NAME) MPointer<NAME> NAME(new NAME())
 
 class MPointerGC;
@@ -118,3 +119,97 @@ public:
 };
 
 MPointerGC* MPointerGC::instance = nullptr;
+
+template <typename T>
+class LinkedList {
+private:
+    struct Node {
+        T data;
+        Node* next;
+        explicit Node(T data) : data(std::move(data)), next(nullptr) {}
+    };
+
+    Node* head;
+    std::mutex mutex;
+
+public:
+    LinkedList() : head(nullptr) {}
+
+    ~LinkedList() {
+        Node* current = head;
+        while (current) {
+            Node* next = current->next;
+            delete current;
+            current = next;
+        }
+    }
+
+    void pushFront(T data) {
+        std::lock_guard<std::mutex> lock(mutex);
+        Node* newNode = new Node(data);
+        newNode->next = head;
+        head = newNode;
+    }
+
+    void remove(Node* node) {
+        std::lock_guard<std::mutex> lock(mutex);
+        if (!node) return;
+        Node* current = head;
+        Node* previous = nullptr;
+        while (current && current != node) {
+            previous = current;
+            current = current->next;
+        }
+        if (current) {
+            if (previous) {
+                previous->next = current->next;
+            } else {
+                head = current->next;
+            }
+            delete current;
+        }
+    }
+
+    Node* find(T data) {
+        std::lock_guard<std::mutex> lock(mutex);
+        Node* current = head;
+        while (current) {
+            if (current->data == data) return current;
+            current = current->next;
+        }
+        return nullptr;
+    }
+
+    void traverse(std::function<void(T&)> callback) {
+        std::lock_guard<std::mutex> lock(mutex);
+        Node* current = head;
+        while (current) {
+            callback(current->data);
+            current = current->next;
+        }
+    }
+};
+
+class MyNode {
+public:
+    MPointer<int> data;
+
+    explicit MyNode(int value) : data(MPointer<int>::New()) {
+        *data = value;
+    }
+};
+
+int main() {
+    LinkedList<MyNode> list;
+    list.pushFront(MyNode(10));
+    list.pushFront(MyNode(20));
+    list.pushFront(MyNode(30));
+
+    list.traverse([](MyNode& node) {
+        std::cout << *node.data << std::endl;
+    });
+
+    MPointerGC::getInstance()->runGC();
+
+    return 0;
+}
