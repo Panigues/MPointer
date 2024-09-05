@@ -4,6 +4,7 @@
 #include <mutex>
 #include <thread>
 #include <unordered_map>
+#define MPOINTER_GC(NAME) MPointer<NAME> NAME(new NAME())
 
 class MPointerGC;
 
